@@ -279,6 +279,24 @@ app.post('/login', async (req, res) => {
 
         const token = uuidv4();
         // Mongoose ID is usually _id, but we used custom 'id' field for uuid compatibility
+        // Get Room Key Endpoint (For session restoration)
+        app.post('/get-room-key', async (req, res) => {
+            const { token } = req.body;
+            const userId = sessions[token];
+            if (!userId) return res.status(401).json({ error: 'Invalid session' });
+
+            try {
+                const user = await User.findById(userId);
+                if (!user) return res.status(404).json({ error: 'User not found' });
+
+                // Generate Room Key for user
+                const encryptedRoomKey = encryptWithPublicKey(user.public_key, GLOBAL_ROOM_KEY_HEX);
+                res.json({ encryptedRoomKey });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
         sessions[token] = user._id.toString();
 
         try {

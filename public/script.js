@@ -132,6 +132,7 @@ async function login() {
                     currentUser.encryptedRoomKey = data.encryptedRoomKey;
                 } catch (e) {
                     console.error("Room Key preparation failed", e);
+                    alert(`Room Key Error: ${e.message}`);
                 }
             }
 
@@ -242,6 +243,21 @@ async function initApp() {
         if (currentUser.encryptedRoomKey) {
             await unwrapRoomKey(currentUser.encryptedRoomKey);
             console.log("Room Key loaded.");
+        } else {
+            // Attempt to fetch Room Key (Session Restore)
+            console.log("Room Key missing. Fetching from server...");
+            const res = await fetch('/get-room-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: sessionToken })
+            });
+            const data = await res.json();
+            if (data.encryptedRoomKey) {
+                await unwrapRoomKey(data.encryptedRoomKey);
+                console.log("Room Key restored from server.");
+            } else {
+                console.warn("Could not retrieve Room Key. Chat may be unreadable.");
+            }
         }
 
         // We also need public keys of others.
