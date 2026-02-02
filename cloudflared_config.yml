@@ -1,0 +1,9 @@
+tunnel: ad9ba8ef-f9d8-4f09-936d-ccf593345844
+credentials-file: /Users/user45/.cloudflared/ad9ba8ef-f9d8-4f09-936d-ccf593345844.json
+
+ingress:
+  - hostname: focys.site
+    service: http://localhost:5500
+  - service: http_status:404
+
+

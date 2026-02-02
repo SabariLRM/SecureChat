@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focys Secure Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Uncut+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Focys Secure Chat</h2>
+            <p>Login or Register to continue</p>
+            <form id="auth-form">
+                <input type="text" id="username-input" placeholder="Username (Register only)" style="display:none;">
+                <input type="email" id="email-input" placeholder="Email" required>
+                <input type="password" id="password-input" placeholder="Password" required>
+                <input type="password" id="confirm-password-input" placeholder="Confirm Password" style="display:none;">
+
+                <div class="auth-buttons">
+                    <button type="submit" id="login-btn">Login</button>
+                    <button type="button" id="toggle-register-btn">Switch to Register</button>
+                </div>
+                <!-- Separate register confirm button, hidden initially or managed by state -->
+                <button type="button" id="confirm-register-btn"
+                    style="display:none; width:100%; margin-top:10px;">Register</button>
+
+                <p id="auth-error" class="error-msg"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- OTP Overlay -->
+    <div id="otp-overlay" style="display: none;">
+        <div class="login-box">
+            <h2>Verify Email</h2>
+            <p>Enter the 6-digit code sent to your email.</p>
+            <input type="text" id="otp-input" placeholder="123456">
+            <button id="verify-otp-btn"
+                style="width: 100%; padding: 12px; background: #6c5ce7; color: white; border: none; border-radius: 6px;">Verify</button>
+            <button id="resend-otp-btn"
+                style="width: 100%; padding: 12px; background: transparent; color: #6c5ce7; border: 1px solid #6c5ce7; border-radius: 6px; margin-top: 10px;">Resend
+                Code</button>
+            <p id="otp-error" class="error-msg"></p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app-container" id="app-container" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>Focys Secure Chat</h1>
+                <div class="status-indicator" id="connection-status">Connecting...</div>
+            </div>
+            <div class="header-right">
+                <span id="user-email-display"></span>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </header>
+
+        <div class="chat-area" id="messages"></div>
+
+        <form class="message-input-area" id="chat-form">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+
+    <!-- OTP Style Override -->
+    <style>
+        #otp-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        }
+    </style>
+</body>
+
+</html>
