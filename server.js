@@ -28,9 +28,9 @@ const transporter = nodemailer.createTransport({
     },
     logger: true,
     debug: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 5000,
-    socketTimeout: 10000
+    connectionTimeout: 60000, // 60s (Cloud networks can be slow)
+    greetingTimeout: 30000,   // 30s
+    socketTimeout: 60000      // 60s
 });
 
 // Helper: Send Email Promise with race timeout
