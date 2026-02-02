@@ -91,8 +91,13 @@ app.post('/register', async (req, res) => {
             // If exists but not verified, we'll overwrite eventually. 
         }
 
+        console.log(`[Register] User ${email} - generating keys...`);
         const hashedPassword = await bcrypt.hash(password, 10);
+
+        const startTime = Date.now();
         const { publicKey, privateKey } = generateUserKeys();
+        console.log(`[Register] Key generation took ${Date.now() - startTime}ms`);
+
         const encryptedPrivateKey = JSON.stringify(encryptPrivateKey(privateKey, password));
 
         // Generate OTP
@@ -111,8 +116,15 @@ app.post('/register', async (req, res) => {
 
         // Send Email
         // Send Email
-        await sendEmail(email, 'Focys Chat - Verify your email', `Your verification code is: ${otpCode}. It expires in 10 minutes.`);
-        console.log(`OTP sent to ${email}`);
+        console.log(`[Register] Sending OTP email to ${email}...`);
+        try {
+            await sendEmail(email, 'Focys Chat - Verify your email', `Your verification code is: ${otpCode}. It expires in 10 minutes.`);
+            console.log(`[Register] OTP sent to ${email}`);
+        } catch (emailErr) {
+            console.error(`[Register] Email failed: ${emailErr.message}`);
+            // Propagate error to warn user
+            return res.status(500).json({ error: 'Failed to send verification email. Please check server logs.' });
+        }
 
         res.json({ message: 'OTP sent. Please verify.' });
 
