@@ -40,6 +40,24 @@ const sendEmail = async (to, subject, text) => {
     return data;
 };
 
+// --- Room Key Management ---
+// Consistent key for message history decryption
+const GLOBAL_ROOM_KEY_HEX = process.env.ROOM_KEY || '517d6928236165c71d9d9f965d507115848bb26c3681434313f8c5c9607823b1';
+
+// Helper: Encrypt Data with User's Public Key (RSA)
+function encryptWithPublicKey(publicKeyPem, data) {
+    const buffer = Buffer.from(data, 'utf8');
+    const encrypted = crypto.publicEncrypt(
+        {
+            key: publicKeyPem,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: "sha256",
+        },
+        buffer
+    );
+    return encrypted.toString('hex');
+}
+
 // Helper: Encrypt/Decrypt Private Key for storage
 function encryptPrivateKey(privateKey, password) {
     const key = crypto.scryptSync(password, 'salt', 32);
@@ -265,6 +283,10 @@ app.post('/login', async (req, res) => {
 
         try {
             const privateKey = decryptPrivateKey(user.private_key_encrypted, password);
+
+            // Generate Room Key for user (Wrap with their Public Key)
+            const encryptedRoomKey = encryptWithPublicKey(user.public_key, GLOBAL_ROOM_KEY_HEX);
+
             res.json({
                 token,
                 user: {
@@ -275,7 +297,8 @@ app.post('/login', async (req, res) => {
                     privateKey: privateKey,
                     isAdmin: user.is_admin === 1,
                     isApproved: user.is_approved === 1
-                }
+                },
+                encryptedRoomKey // Send the wrapped room key
             });
         } catch (e) {
             console.error(e);

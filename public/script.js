@@ -115,6 +115,26 @@ async function login() {
         if (res.ok) {
             sessionToken = data.token;
             currentUser = data.user;
+
+            // Decrypt Room Key
+            if (data.encryptedRoomKey) {
+                try {
+                    // We need private key imported first to decrypt the room key
+                    // But initApp imports the private key. We should probably do it here or inside initApp.
+                    // Let's import private key here first just to decrypt room key, OR pass it to initApp.
+                    // Actually, initApp does `importPrivateKey`. Let's wait for initApp?
+                    // But `unwrapRoomKey` needs `myPrivateKey`.
+                    // Let's modify the flow:
+                    // 1. initApp imports User Keys.
+                    // 2. Then we Unwrap Room Key.
+
+                    // We need to store encryptedRoomKey temporarily or pass it.
+                    currentUser.encryptedRoomKey = data.encryptedRoomKey;
+                } catch (e) {
+                    console.error("Room Key preparation failed", e);
+                }
+            }
+
             await initApp();
         } else {
             authError.textContent = data.error;
@@ -217,6 +237,13 @@ async function initApp() {
     // Import Keys
     try {
         myPrivateKey = await importPrivateKey(currentUser.privateKey);
+
+        // Decrypt Room Key if available
+        if (currentUser.encryptedRoomKey) {
+            await unwrapRoomKey(currentUser.encryptedRoomKey);
+            console.log("Room Key loaded.");
+        }
+
         // We also need public keys of others.
         await fetchUsers();
 
@@ -260,52 +287,63 @@ async function importPublicKey(pem) {
     return window.crypto.subtle.importKey("spki", pemToArrayBuffer(pem), KEY_ALGO, true, ["encrypt"]);
 }
 
-async function encryptMessage(text) {
-    // 1. Generate AES Key
-    const aesKey = await window.crypto.subtle.generateKey(ENC_ALGO, true, ["encrypt", "decrypt"]);
+// --- Room Key Management ---
+let currentRoomKey = null;
 
-    // 2. Encrypt Content
+async function unwrapRoomKey(encryptedRoomKeyHex) {
+    if (!myPrivateKey) throw new Error("Private Key not loaded");
+    const encryptedBytes = hexToArrayBuffer(encryptedRoomKeyHex);
+    // Decrypt the AES Key using RSA Private Key
+    const aesKeyRaw = await window.crypto.subtle.decrypt(KEY_ALGO, myPrivateKey, encryptedBytes);
+    // Import the AES Key
+    currentRoomKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptMessage(text) {
+    if (!currentRoomKey) throw new Error("Room Key not available");
+
+    // 1. Encrypt Content with Room Key (AES-GCM)
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(text);
-    const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoded);
+    const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, currentRoomKey, encoded);
 
-    // 3. Encrypt AES Key for Each User
-    const keysPayload = {};
-    const exportedAesKey = await window.crypto.subtle.exportKey("raw", aesKey);
-
-    for (const email in usersMap) {
-        const user = usersMap[email];
-        if (!user.public_key) continue;
-        try {
-            const pubKey = await importPublicKey(user.public_key);
-            const encryptedKey = await window.crypto.subtle.encrypt(KEY_ALGO, pubKey, exportedAesKey);
-            keysPayload[email] = arrayBufferToHex(encryptedKey);
-        } catch (e) {
-            console.warn(`Could not encrypt for ${email}`, e);
-        }
-    }
-
+    // 2. Return payload (No per-user keys needed anymore!)
     return {
         iv: arrayBufferToHex(iv),
         content: arrayBufferToHex(ciphertext),
-        keys: keysPayload
+        type: 'room-v1' // Version tag for future proofing
     };
 }
 
 async function decryptMessage(payload) {
-    const { iv, content, keys } = payload;
-    const myEncryptedKey = keys[currentUser.email];
-    if (!myEncryptedKey) throw new Error("No key for me");
+    // Support Legacy (Per-User Keys) Messages
+    if (payload.keys && !payload.type) {
+        const { iv, content, keys } = payload;
+        const myEncryptedKey = keys[currentUser.email];
+        if (!myEncryptedKey) throw new Error("No private key for me (Legacy message)");
 
-    const encryptedKeyBuffer = hexToArrayBuffer(myEncryptedKey);
-    const aesKeyRaw = await window.crypto.subtle.decrypt(KEY_ALGO, myPrivateKey, encryptedKeyBuffer);
-    const aesKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["decrypt"]);
+        const encryptedKeyBuffer = hexToArrayBuffer(myEncryptedKey);
+        const aesKeyRaw = await window.crypto.subtle.decrypt(KEY_ALGO, myPrivateKey, encryptedKeyBuffer);
+        const aesKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["decrypt"]);
 
-    const ivBuffer = hexToArrayBuffer(iv);
-    const contentBuffer = hexToArrayBuffer(content);
-    const decryptedBuffer = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuffer }, aesKey, contentBuffer);
+        const ivBuffer = hexToArrayBuffer(iv);
+        const contentBuffer = hexToArrayBuffer(content);
+        const decryptedBuffer = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuffer }, aesKey, contentBuffer);
 
-    return new TextDecoder().decode(decryptedBuffer);
+        return new TextDecoder().decode(decryptedBuffer);
+    }
+
+    // Room Key Messages
+    if (payload.type === 'room-v1') {
+        if (!currentRoomKey) throw new Error("Room Key missing");
+        const { iv, content } = payload;
+        const ivBuffer = hexToArrayBuffer(iv);
+        const contentBuffer = hexToArrayBuffer(content);
+        const decryptedBuffer = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuffer }, currentRoomKey, contentBuffer);
+        return new TextDecoder().decode(decryptedBuffer);
+    }
+
+    throw new Error("Unknown message type");
 }
 
 function arrayBufferToHex(buffer) {
