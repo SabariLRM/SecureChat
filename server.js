@@ -9,6 +9,8 @@ const { v4: uuidv4 } = require('uuid');
 const nodemailer = require('nodemailer');
 const { connectDB, User, Message } = require('./db_mongo');
 
+const { Resend } = require('resend');
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -16,41 +18,26 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Connect to MongoDB
 connectDB();
 
-// Configure Nodemailer (Use your real credentials)
-// Configure Nodemailer with explicit SMTP and Timeouts
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465, // Use 465 for SSL/TLS
-    secure: true, // true for 465
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    },
-    logger: true,
-    debug: true,
-    connectionTimeout: 60000, // 60s (Cloud networks can be slow)
-    greetingTimeout: 30000,   // 30s
-    socketTimeout: 60000      // 60s
-});
+// Configure Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Helper: Send Email Promise with race timeout
+// Helper: Send Email using Resend
 const sendEmail = async (to, subject, text) => {
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to,
-        subject,
-        text
-    };
+    console.log(`[Resend] Sending email to ${to}...`);
+    // Note: Resend Free Tier only sends to your verified email or verified domain.
+    const { data, error } = await resend.emails.send({
+        from: 'Focys Chat <onboarding@resend.dev>', // Should update to 'SecureChat <admin@focys.site>' once domain is verified
+        to: [to],
+        subject: subject,
+        html: `<p>${text}</p>`
+    });
 
-    // Force timeout after 15 seconds if transport hangs
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Email sending timed out after 15s')), 15000)
-    );
-
-    return Promise.race([
-        transporter.sendMail(mailOptions),
-        timeoutPromise
-    ]);
+    if (error) {
+        console.error('[Resend] Error:', error);
+        throw new Error(error.message);
+    }
+    console.log('[Resend] Success:', data);
+    return data;
 };
 
 // Helper: Encrypt/Decrypt Private Key for storage

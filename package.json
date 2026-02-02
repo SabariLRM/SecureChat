@@ -18,6 +18,7 @@
     "express": "^5.2.1",
     "mongoose": "^9.1.5",
     "nodemailer": "^7.0.13",
+    "resend": "^6.9.1",
     "socket.io": "^4.8.3",
     "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
