@@ -20,15 +20,15 @@ connectDB();
 // Configure Nodemailer with explicit SMTP and Timeouts
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    port: 465, // Use 465 for SSL/TLS
+    secure: true, // true for 465
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     },
-    logger: true, // Log to console
-    debug: true,  // Include SMTP traffic in logs
-    connectionTimeout: 10000, // 10s timeout
+    logger: true,
+    debug: true,
+    connectionTimeout: 10000,
     greetingTimeout: 5000,
     socketTimeout: 10000
 });
