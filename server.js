@@ -17,23 +17,40 @@ app.use(express.static(path.join(__dirname, 'public')));
 connectDB();
 
 // Configure Nodemailer (Use your real credentials)
+// Configure Nodemailer with explicit SMTP and Timeouts
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-    }
+    },
+    logger: true, // Log to console
+    debug: true,  // Include SMTP traffic in logs
+    connectionTimeout: 10000, // 10s timeout
+    greetingTimeout: 5000,
+    socketTimeout: 10000
 });
 
-// Helper: Send Email Promise
+// Helper: Send Email Promise with race timeout
 const sendEmail = async (to, subject, text) => {
     const mailOptions = {
-        from: process.env.EMAIL_USER, // Use the authenticated environment variable
+        from: process.env.EMAIL_USER,
         to,
         subject,
         text
     };
-    return transporter.sendMail(mailOptions);
+
+    // Force timeout after 15 seconds if transport hangs
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Email sending timed out after 15s')), 15000)
+    );
+
+    return Promise.race([
+        transporter.sendMail(mailOptions),
+        timeoutPromise
+    ]);
 };
 
 // Helper: Encrypt/Decrypt Private Key for storage
