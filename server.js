@@ -26,7 +26,7 @@ const sendEmail = async (to, subject, text) => {
     console.log(`[Resend] Sending email to ${to}...`);
     // Note: Resend Free Tier only sends to your verified email or verified domain.
     const { data, error } = await resend.emails.send({
-        from: 'Focys Chat <onboarding@resend.dev>', // Should update to 'SecureChat <admin@focys.site>' once domain is verified
+        from: 'Focys Chat <admin@focys.site>', // Verified domain
         to: [to],
         subject: subject,
         html: `<p>${text}</p>`
