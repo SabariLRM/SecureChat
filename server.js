@@ -7,11 +7,14 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const nodemailer = require('nodemailer');
-const db = require('./database');
+const { connectDB, User, Message } = require('./db_mongo');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Connect to MongoDB
+connectDB();
 
 // Configure Nodemailer (Use your real credentials)
 const transporter = nodemailer.createTransport({
@@ -21,6 +24,17 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS
     }
 });
+
+// Helper: Send Email Promise
+const sendEmail = async (to, subject, text) => {
+    const mailOptions = {
+        from: process.env.EMAIL_USER, // Use the authenticated environment variable
+        to,
+        subject,
+        text
+    };
+    return transporter.sendMail(mailOptions);
+};
 
 // Helper: Encrypt/Decrypt Private Key for storage
 function encryptPrivateKey(privateKey, password) {
@@ -69,12 +83,12 @@ app.post('/register', async (req, res) => {
     const { email, username, password } = req.body;
     if (!email || !username || !password) return res.status(400).json({ error: 'Missing fields' });
 
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row) => {
-        if (row) {
+    try {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
             // Already verified user?
-            if (row.is_verified) return res.status(400).json({ error: 'User already exists' });
+            if (existingUser.is_verified) return res.status(400).json({ error: 'User already exists' });
             // If exists but not verified, we'll overwrite eventually. 
-            // For now, allow proceeding to OTP generation.
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -96,24 +110,19 @@ app.post('/register', async (req, res) => {
         };
 
         // Send Email
-        const mailOptions = {
-            from: 'focys-chat@gmail.com',
-            to: email,
-            subject: 'Focys Chat - Verify your email',
-            text: `Your verification code is: ${otpCode}. It expires in 10 minutes.`
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) console.log('Error sending email:', error);
-            else console.log('Email sent: ' + info.response);
-        });
+        // Send Email
+        await sendEmail(email, 'Focys Chat - Verify your email', `Your verification code is: ${otpCode}. It expires in 10 minutes.`);
+        console.log(`OTP sent to ${email}`);
 
         res.json({ message: 'OTP sent. Please verify.' });
-    });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Resend OTP Endpoint
-app.post('/resend-otp', (req, res) => {
+app.post('/resend-otp', async (req, res) => {
     const { email } = req.body;
 
     // Check pending first
@@ -123,47 +132,39 @@ app.post('/resend-otp', (req, res) => {
         pendingRegistrations[email].otpCode = otpCode;
         pendingRegistrations[email].otpExpiry = otpExpiry;
 
-        const mailOptions = {
-            from: 'focys-chat@gmail.com',
-            to: email,
-            subject: 'Focys Chat - New OTP Code',
-            text: `Your new verification code is: ${otpCode}.`
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) console.log('Error sending email:', error);
-        });
+        try {
+            await sendEmail(email, 'Focys Chat - New OTP Code', `Your new verification code is: ${otpCode}.`);
+        } catch (emailErr) {
+            console.error('Error sending email:', emailErr);
+            // Don't fail the request if it's just a resend issue, but good to know
+        }
 
         return res.json({ message: 'OTP Resent' });
     }
 
     // Fallback: Check DB if user somehow exists but unverified (legacy)
-    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+    try {
+        const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ error: 'User not found or already verified' });
         if (user.is_verified) return res.status(400).json({ error: 'User already verified' });
 
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = Date.now() + 10 * 60 * 1000;
 
-        db.run('UPDATE users SET otp_code = ?, otp_expiry = ? WHERE id = ?', [otpCode, otpExpiry, user.id], (err) => {
-            if (err) return res.status(500).json({ error: err.message });
+        user.otp_code = otpCode;
+        user.otp_expiry = otpExpiry;
+        await user.save();
 
-            // Send Mail...
-            const mailOptions = {
-                from: 'focys-chat@gmail.com',
-                to: email,
-                subject: 'Focys Chat - New OTP Code',
-                text: `Your new verification code is: ${otpCode}.`
-            };
-            transporter.sendMail(mailOptions, (error, info) => { });
+        await sendEmail(email, 'Focys Chat - New OTP Code', `Your new verification code is: ${otpCode}.`);
 
-            res.json({ message: 'OTP Resent' });
-        });
-    });
+        res.json({ message: 'OTP Resent' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Verify OTP Endpoint: Finalize Registration here
-app.post('/verify-otp', (req, res) => {
+app.post('/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
 
     // 1. Check Pending Registrations
@@ -172,13 +173,15 @@ app.post('/verify-otp', (req, res) => {
         if (pending.otpCode !== otp) return res.status(400).json({ error: 'Invalid OTP' });
         if (Date.now() > pending.otpExpiry) return res.status(400).json({ error: 'OTP Expired' });
 
-        // Create User in DB NOW
-        db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
-            // Clean up potential stale unverified user
-            if (row && !row.is_verified) {
-                db.run('DELETE FROM users WHERE email = ?', [email]);
-            } else if (row) {
-                return res.status(400).json({ error: 'User already verified' });
+        try {
+            // Check for stale unverified user and delete if exists
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                if (!existingUser.is_verified) {
+                    await User.deleteOne({ email });
+                } else {
+                    return res.status(400).json({ error: 'User already verified' });
+                }
             }
 
             const id = uuidv4();
@@ -186,49 +189,63 @@ app.post('/verify-otp', (req, res) => {
             const isApproved = 1; // Auto-approve everyone
             const isVerified = 1; // Verified immediately
 
-            db.run(`INSERT INTO users (id, email, username, password_hash, public_key, private_key_encrypted, is_admin, is_approved, otp_code, otp_expiry, is_verified) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, email, pending.username, pending.hashedPassword, pending.publicKey, pending.encryptedPrivateKey, isAdmin, isApproved, null, null, isVerified],
-                (err) => {
-                    if (err) return res.status(500).json({ error: err.message });
+            const newUser = new User({
+                id,
+                email,
+                username: pending.username,
+                password_hash: pending.hashedPassword,
+                public_key: pending.publicKey,
+                private_key_encrypted: pending.encryptedPrivateKey,
+                is_admin: isAdmin,
+                is_approved: isApproved,
+                is_verified: isVerified
+            });
 
-                    // Clean up pending
-                    delete pendingRegistrations[email];
+            await newUser.save();
 
-                    res.json({ message: 'Email verified. Account created. Please login.' });
-                    // Broadcast to ALL so clients update their usersMap (and get new public keys)
-                    io.emit('new-user-pending', { email, username: pending.username });
-                });
-        });
+            // Clean up pending
+            delete pendingRegistrations[email];
+
+            res.json({ message: 'Email verified. Account created. Please login.' });
+            // Broadcast to ALL
+            io.emit('new-user-pending', { email, username: pending.username });
+
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
         return;
     }
 
     // 2. Legacy Check (if user verified old way)
-    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+    try {
+        const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ error: 'User not found or expired' });
         if (user.otp_code !== otp) return res.status(400).json({ error: 'Invalid OTP' });
-        // ...
-        db.run('UPDATE users SET is_verified = 1 WHERE id = ?', [user.id], (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Email verified' });
-        });
-    });
+
+        user.is_verified = 1;
+        await user.save();
+        res.json({ message: 'Email verified' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Login Endpoint (Updated Check)
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { email, password } = req.body;
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-        if (!user || user.password_hash === null) return res.status(400).json({ error: 'Invalid credentials' });
+    try {
+        const user = await User.findOne({ email });
+        if (!user || !user.password_hash) return res.status(400).json({ error: 'Invalid credentials' });
 
-        // Check verification (Skip for admin if auto-verified)
+        // Check verification
         if (user.is_verified === 0) return res.status(403).json({ error: 'Email not verified. Please verify OTP.' });
 
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) return res.status(400).json({ error: 'Invalid credentials' });
 
         const token = uuidv4();
-        sessions[token] = user.id;
+        // Mongoose ID is usually _id, but we used custom 'id' field for uuid compatibility
+        sessions[token] = user._id.toString();
 
         try {
             const privateKey = decryptPrivateKey(user.private_key_encrypted, password);
@@ -237,7 +254,7 @@ app.post('/login', (req, res) => {
                 user: {
                     id: user.id,
                     email: user.email,
-                    username: user.username || user.email.split('@')[0], // Fallback
+                    username: user.username || user.email.split('@')[0],
                     publicKey: user.public_key,
                     privateKey: privateKey,
                     isAdmin: user.is_admin === 1,
@@ -248,32 +265,37 @@ app.post('/login', (req, res) => {
             console.error(e);
             res.status(500).json({ error: 'Key decryption failed' });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// Approve Endpoint (Admin Only)
-app.post('/approve', (req, res) => {
+// Approve Endpoint (Admin Only) (Still kept API if needed, though mostly auto-approved)
+app.post('/approve', async (req, res) => {
     const { token, targetEmail } = req.body;
-    const adminId = sessions[token];
-    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+    const adminObjectId = sessions[token];
+    if (!adminObjectId) return res.status(401).json({ error: 'Unauthorized' });
 
-    db.get('SELECT is_admin FROM users WHERE id = ?', [adminId], (err, admin) => {
+    try {
+        const admin = await User.findById(adminObjectId);
         if (!admin || !admin.is_admin) return res.status(403).json({ error: 'Forbidden' });
 
-        db.run('UPDATE users SET is_approved = 1 WHERE email = ?', [targetEmail], function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            io.emit('user-approved', { email: targetEmail });
-            res.json({ message: 'User approved' });
-        });
-    });
+        await User.updateOne({ email: targetEmail }, { is_approved: 1 });
+        io.emit('user-approved', { email: targetEmail });
+        res.json({ message: 'User approved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Get Users Endpoint
-app.get('/users', (req, res) => {
-    db.all('SELECT id, email, username, public_key, is_approved, is_admin FROM users', (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+app.get('/users', async (req, res) => {
+    try {
+        const users = await User.find({}, 'id email username public_key is_approved is_admin');
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 io.on('connection', (socket) => {
@@ -284,44 +306,64 @@ io.on('connection', (socket) => {
         socket.join(email);
         console.log(`User ${email} joined.`);
 
-        // Fetch history
-        // Join with users table to get sender's username
-        db.all(`SELECT m.*, u.username as sender_username, u.is_approved as sender_approved 
-                FROM messages m 
-                LEFT JOIN users u ON m.sender_email = u.email
-                ORDER BY m.timestamp ASC`,
-            [],
-            (err, rows) => {
-                if (err) return console.error(err);
-                socket.emit('history', rows);
-            });
+        // Fetch history using Aggregate to join Users table
+        Message.aggregate([
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'sender_email',
+                    foreignField: 'email',
+                    as: 'senderInfo'
+                }
+            },
+            {
+                $unwind: { path: '$senderInfo', preserveNullAndEmptyArrays: true }
+            },
+            {
+                $project: {
+                    sender_email: 1,
+                    receiver_email: 1,
+                    encrypted_content: 1,
+                    timestamp: 1,
+                    sender_username: '$senderInfo.username',
+                    sender_approved: '$senderInfo.is_approved' // 0 or 1
+                }
+            },
+            { $sort: { timestamp: 1 } }
+        ]).then(rows => {
+            // Transform date to ISO string if needed match SQLite 'timestamp'
+            socket.emit('history', rows);
+        }).catch(err => {
+            console.error(err);
+        });
     });
 
-    socket.on('chat message', (msg) => {
-        const { sender, receiver, encrypted, senderUsername } = msg;
-        // Note: We trust the client sent username, or better, we look it up.
-        // For efficiency in this loop, trusting the socket logic or client.
-        // Better: look up username from DB using sender email.
+    socket.on('chat message', async (msg) => {
+        const { sender, receiver, encrypted } = msg;
 
-        db.get('SELECT username, is_approved FROM users WHERE email = ?', [sender], (err, user) => {
+        try {
+            const user = await User.findOne({ email: sender });
             const username = user ? user.username : sender;
             const isApproved = user ? user.is_approved : 0;
 
-            // Save to DB
-            db.run(`INSERT INTO messages (sender_email, receiver_email, encrypted_content) VALUES (?, ?, ?)`,
-                [sender, receiver || 'all', JSON.stringify(encrypted)],
-                function (err) {
-                    if (err) console.error(err);
-                    const msgId = this.lastID;
-                    // Broadcast
-                    io.emit('chat message', {
-                        ...msg,
-                        senderUsername: username,
-                        isApproved,
-                        id: msgId
-                    });
-                });
-        });
+            const newMessage = new Message({
+                sender_email: sender,
+                receiver_email: receiver || 'all',
+                encrypted_content: JSON.stringify(encrypted)
+            });
+
+            const savedMsg = await newMessage.save();
+
+            // Broadcast
+            io.emit('chat message', {
+                ...msg,
+                senderUsername: username,
+                isApproved,
+                id: savedMsg._id // Use Mongo ID
+            });
+        } catch (err) {
+            console.error(err);
+        }
     });
 
     socket.on('disconnect', () => {
