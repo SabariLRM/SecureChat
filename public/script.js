@@ -393,10 +393,14 @@ async function displayMessage(msg) {
             const text = await decryptMessage(msg.encrypted);
             contentSpan.textContent = text;
         } catch (e) {
-            contentSpan.textContent = "[Encrypted Content]";
+            console.error("Decryption Error:", e);
+            // Show specific error to user for debugging
+            contentSpan.textContent = `[Encrypted: ${e.message}]`;
+            contentSpan.classList.add('error-text');
+
             const meta = document.createElement('small');
             meta.className = 'encrypted-indicator';
-            meta.textContent = "🔒 Decryption Failed";
+            meta.textContent = " 🔒";
             div.appendChild(meta);
         }
     } else {
@@ -438,7 +442,6 @@ window.approveUser = async (targetEmail) => {
         if (res.ok) {
             usersMap[targetEmail].is_approved = 1;
             renderPendingUsers();
-            // socket.emit('join', currentUser.email); // REMOVED: Redundant, triggered by user-approved
         }
     } catch (e) {
         alert("Error approving");
@@ -462,4 +465,6 @@ socket.on('user-approved', ({ email }) => {
 socket.on('connect', () => {
     connectionStatus.textContent = 'Connected';
     connectionStatus.classList.add('connected');
+    // Refetch users on reconnect to ensure we have latest keys
+    if (currentUser) fetchUsers();
 });
