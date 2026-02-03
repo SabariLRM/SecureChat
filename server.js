@@ -194,7 +194,7 @@ app.post('/register', async (req, res) => {
         // Generate OTP
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 mins
-        console.log(`[DEBUG] Generated OTP for ${email}: ${otpCode}`);
+        console.log(`otp sent to email ${email}: ${otpCode}`);
 
         // Store internally
         pendingRegistrations[email] = {
@@ -233,7 +233,7 @@ app.post('/resend-otp', async (req, res) => {
     if (pendingRegistrations[email]) {
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = Date.now() + 10 * 60 * 1000;
-        console.log(`[DEBUG] Resent OTP for ${email} (pending): ${otpCode}`);
+        console.log(`otp sent to email ${email}: ${otpCode}`);
         pendingRegistrations[email].otpCode = otpCode;
         pendingRegistrations[email].otpExpiry = otpExpiry;
 
@@ -255,7 +255,7 @@ app.post('/resend-otp', async (req, res) => {
 
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpiry = Date.now() + 10 * 60 * 1000;
-        console.log(`[DEBUG] Resent OTP for ${email} (DB): ${otpCode}`);
+        console.log(`otp sent to email ${email}: ${otpCode}`);
 
         user.otp_code = otpCode;
         user.otp_expiry = otpExpiry;
