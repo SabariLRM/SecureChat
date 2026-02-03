@@ -135,7 +135,7 @@ app.post('/login', async (req, res) => {
                     username: user.username || user.email.split('@')[0],
                     publicKey: user.public_key,
                     privateKey: privateKey,
-                    isAdmin: user.is_admin === 1,
+                    isAdmin: false, // Force Admin check OFF to debug visibility (make like normal user)
                     isApproved: user.is_approved === 1
                 },
                 encryptedRoomKey // Send the wrapped room key
@@ -287,7 +287,7 @@ app.post('/verify-otp', async (req, res) => {
             }
 
             const id = uuidv4();
-            const isAdmin = email === 'camponotus76@gmail.com' ? 1 : 0;
+            const isAdmin = 0; // Force Admin OFF for now
             const isApproved = 1; // Auto-approve everyone
             const isVerified = 1; // Verified immediately
 
