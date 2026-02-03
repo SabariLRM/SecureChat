@@ -454,6 +454,7 @@ io.on('connection', (socket) => {
             { $sort: { timestamp: 1 } }
         ]).then(rows => {
             // Transform date to ISO string if needed match SQLite 'timestamp'
+            console.log(`[DEBUG] Sending history to ${email}: ${rows.length} msgs`);
             socket.emit('history', rows);
         }).catch(err => {
             console.error(err);
@@ -462,6 +463,7 @@ io.on('connection', (socket) => {
 
     socket.on('chat message', async (msg) => {
         const { sender, receiver, encrypted } = msg;
+        console.log(`[DEBUG] Received msg from ${sender}`);
 
         try {
             const user = await User.findOne({ email: sender });
@@ -475,6 +477,7 @@ io.on('connection', (socket) => {
             });
 
             const savedMsg = await newMessage.save();
+            console.log(`[DEBUG] Message saved to DB: ${savedMsg._id}`);
 
             // Broadcast
             io.emit('chat message', {
@@ -484,7 +487,7 @@ io.on('connection', (socket) => {
                 id: savedMsg._id // Use Mongo ID
             });
         } catch (err) {
-            console.error(err);
+            console.error('[ERROR] Message Save Failed:', err);
         }
     });
 
