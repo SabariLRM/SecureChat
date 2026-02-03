@@ -345,7 +345,7 @@ async function deleteUser(userId) {
 
 // Show Admin Button check (call in initApp or after login)
 function checkAdminUI() {
-    if (currentUser && currentUser.isAdmin) {
+    if (currentUser && currentUser.adminConfirm) {
         adminBtn.style.display = 'inline-block';
     } else {
         adminBtn.style.display = 'none';
