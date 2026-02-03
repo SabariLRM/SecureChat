@@ -19,10 +19,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 connectDB();
 
 // Configure Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend;
+if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+} else {
+    console.warn("[WARN] RESEND_API_KEY missing. Email sending will be disabled.");
+}
 
 // Helper: Send Email using Resend
 const sendEmail = async (to, subject, text) => {
+    if (!resend) {
+        console.log(`[Mock Email] To: ${to}, Subject: ${subject}`);
+        return { id: 'mock-id' };
+    }
+
     console.log(`[Resend] Sending email to ${to}...`);
     // Note: Resend Free Tier only sends to your verified email or verified domain.
     const { data, error } = await resend.emails.send({

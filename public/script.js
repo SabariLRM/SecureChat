@@ -528,15 +528,36 @@ socket.on('chat message', async (msg) => {
 });
 
 socket.on('history', async (msgs) => {
+    console.log(`[History] Received ${msgs.length} messages.`);
     messagesDiv.innerHTML = '';
+
+    if (!msgs || msgs.length === 0) {
+        messagesDiv.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No messages yet.</div>';
+        return;
+    }
+
     for (const msg of msgs) {
-        const parsed = {
-            sender: msg.sender_email,
-            senderUsername: msg.sender_username,
-            encrypted: JSON.parse(msg.encrypted_content),
-            isApproved: msg.sender_approved
-        };
-        await displayMessage(parsed);
+        try {
+            let encryptedObj;
+            try {
+                encryptedObj = typeof msg.encrypted_content === 'string'
+                    ? JSON.parse(msg.encrypted_content)
+                    : msg.encrypted_content;
+            } catch (e) {
+                console.error("[History] JSON Parse Error for msg:", msg, e);
+                continue; // Skip bad message
+            }
+
+            const parsed = {
+                sender: msg.sender_email,
+                senderUsername: msg.sender_username,
+                encrypted: encryptedObj,
+                isApproved: msg.sender_approved
+            };
+            await displayMessage(parsed);
+        } catch (err) {
+            console.error("[History] Error displaying message:", err);
+        }
     }
 });
 
