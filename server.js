@@ -46,7 +46,7 @@ const GLOBAL_ROOM_KEY_HEX = process.env.ROOM_KEY || '517d6928236165c71d9d9f965d5
 
 // Helper: Encrypt Data with User's Public Key (RSA)
 function encryptWithPublicKey(publicKeyPem, data) {
-    const buffer = Buffer.from(data, 'utf8');
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
     const encrypted = crypto.publicEncrypt(
         {
             key: publicKeyPem,
@@ -57,6 +57,7 @@ function encryptWithPublicKey(publicKeyPem, data) {
     );
     return encrypted.toString('hex');
 }
+
 
 // Helper: Encrypt/Decrypt Private Key for storage
 function encryptPrivateKey(privateKey, password) {
@@ -99,6 +100,73 @@ const sessions = {}; // token -> userId
 
 // Temporary storage for registrations pending OTP
 const pendingRegistrations = {}; // email -> { username, hashedPassword, publicKey, encryptedPrivateKey, otpCode, otpExpiry }
+
+
+// Login Endpoint (Updated Check)
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const user = await User.findOne({ email });
+        if (!user || !user.password_hash) return res.status(400).json({ error: 'Invalid credentials' });
+
+        // Check verification
+        if (user.is_verified === 0) return res.status(403).json({ error: 'Email not verified. Please verify OTP.' });
+
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) return res.status(400).json({ error: 'Invalid credentials' });
+
+        const token = uuidv4();
+        // Mongoose ID is usually _id, but we used custom 'id' field for uuid compatibility
+        sessions[token] = user._id.toString();
+
+        try {
+            const privateKey = decryptPrivateKey(user.private_key_encrypted, password);
+
+            // Generate Room Key for user (Wrap with their Public Key)
+            // Fix: Send RAW BYTES (32 bytes), not Hex String (64 bytes)
+            const roomKeyBuffer = Buffer.from(GLOBAL_ROOM_KEY_HEX, 'hex');
+            const encryptedRoomKey = encryptWithPublicKey(user.public_key, roomKeyBuffer);
+
+            res.json({
+                token,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    username: user.username || user.email.split('@')[0],
+                    publicKey: user.public_key,
+                    privateKey: privateKey,
+                    isAdmin: user.is_admin === 1,
+                    isApproved: user.is_approved === 1
+                },
+                encryptedRoomKey // Send the wrapped room key
+            });
+        } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: 'Decryption failed (Internal)' });
+        }
+    } catch (outerError) {
+        res.status(500).json({ error: outerError.message });
+    }
+});
+
+// Get Room Key Endpoint (For session restoration)
+app.post('/get-room-key', async (req, res) => {
+    const { token } = req.body;
+    const userId = sessions[token];
+    if (!userId) return res.status(401).json({ error: 'Invalid session' });
+
+    try {
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Generate Room Key for user
+        const roomKeyBuffer = Buffer.from(GLOBAL_ROOM_KEY_HEX, 'hex');
+        const encryptedRoomKey = encryptWithPublicKey(user.public_key, roomKeyBuffer);
+        res.json({ encryptedRoomKey });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Register Endpoint: Initiate (Store locally + Send OTP)
 app.post('/register', async (req, res) => {
@@ -259,69 +327,6 @@ app.post('/verify-otp', async (req, res) => {
         user.is_verified = 1;
         await user.save();
         res.json({ message: 'Email verified' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Login Endpoint (Updated Check)
-app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const user = await User.findOne({ email });
-        if (!user || !user.password_hash) return res.status(400).json({ error: 'Invalid credentials' });
-
-        // Check verification
-        if (user.is_verified === 0) return res.status(403).json({ error: 'Email not verified. Please verify OTP.' });
-
-        const match = await bcrypt.compare(password, user.password_hash);
-        if (!match) return res.status(400).json({ error: 'Invalid credentials' });
-
-        const token = uuidv4();
-        // Mongoose ID is usually _id, but we used custom 'id' field for uuid compatibility
-        // Get Room Key Endpoint (For session restoration)
-        app.post('/get-room-key', async (req, res) => {
-            const { token } = req.body;
-            const userId = sessions[token];
-            if (!userId) return res.status(401).json({ error: 'Invalid session' });
-
-            try {
-                const user = await User.findById(userId);
-                if (!user) return res.status(404).json({ error: 'User not found' });
-
-                // Generate Room Key for user
-                const encryptedRoomKey = encryptWithPublicKey(user.public_key, GLOBAL_ROOM_KEY_HEX);
-                res.json({ encryptedRoomKey });
-            } catch (err) {
-                res.status(500).json({ error: err.message });
-            }
-        });
-
-        sessions[token] = user._id.toString();
-
-        try {
-            const privateKey = decryptPrivateKey(user.private_key_encrypted, password);
-
-            // Generate Room Key for user (Wrap with their Public Key)
-            const encryptedRoomKey = encryptWithPublicKey(user.public_key, GLOBAL_ROOM_KEY_HEX);
-
-            res.json({
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    username: user.username || user.email.split('@')[0],
-                    publicKey: user.public_key,
-                    privateKey: privateKey,
-                    isAdmin: user.is_admin === 1,
-                    isApproved: user.is_approved === 1
-                },
-                encryptedRoomKey // Send the wrapped room key
-            });
-        } catch (e) {
-            console.error(e);
-            res.status(500).json({ error: 'Key decryption failed' });
-        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
