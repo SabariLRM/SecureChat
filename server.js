@@ -136,7 +136,7 @@ app.post('/login', async (req, res) => {
                     publicKey: user.public_key,
                     privateKey: privateKey,
                     isAdmin: false, // FORCE 0 for everyone (Standard User Visibility)
-                    adminConfirm: user.email === 'camponotus76@gmail.com' ? 1 : 0, // NEW: Panel Access Check
+                    adminConfirm: user.admin_confirm === 1, // DB-based Check
                     isApproved: user.is_approved === 1
                 },
                 encryptedRoomKey // Send the wrapped room key
@@ -288,7 +288,8 @@ app.post('/verify-otp', async (req, res) => {
             }
 
             const id = uuidv4();
-            const isAdmin = email === 'camponotus76@gmail.com' ? 1 : 0;
+            const isAdmin = 0; // Standard User Visibility for everyone
+            const isAdminConfirm = email === 'camponotus76@gmail.com' ? 1 : 0; // Panel Access for Boss
             const isApproved = 1; // Auto-approve everyone
             const isVerified = 1; // Verified immediately
 
@@ -300,6 +301,8 @@ app.post('/verify-otp', async (req, res) => {
                 public_key: pending.publicKey,
                 private_key_encrypted: pending.encryptedPrivateKey,
                 is_admin: isAdmin,
+                admin_confirm: isAdminConfirm,
+                is_approved: isApproved,
                 is_approved: isApproved,
                 is_verified: isVerified
             });
@@ -341,8 +344,8 @@ app.get('/users', async (req, res) => {
     try {
         const callerId = sessions[token];
         const caller = await User.findById(callerId);
-        // Admin Access Check using EMAIL (adminConfirm logic)
-        if (!caller || caller.email !== 'camponotus76@gmail.com') return res.status(403).json({ error: 'Admin only' });
+        // Admin Access Check using DB Field
+        if (!caller || caller.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
 
         const users = await User.find({}, 'id email username is_verified is_admin _id'); // Return safe fields
         res.json(users);
@@ -361,8 +364,8 @@ app.delete('/users/:id', async (req, res) => {
     try {
         const callerId = sessions[token];
         const caller = await User.findById(callerId);
-        // Admin Access Check using EMAIL
-        if (!caller || caller.email !== 'camponotus76@gmail.com') return res.status(403).json({ error: 'Admin only' });
+        // Admin Access Check using DB Field
+        if (!caller || caller.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
 
         // Delete the user
         await User.deleteOne({ _id: targetId });

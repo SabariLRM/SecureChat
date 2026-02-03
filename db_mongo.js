@@ -24,6 +24,7 @@ const userSchema = new mongoose.Schema({
     public_key: { type: String, required: true },
     private_key_encrypted: { type: String, required: true },
     is_admin: { type: Number, default: 0 }, // 0 or 1
+    admin_confirm: { type: Number, default: 0 }, // 0 or 1 (Panel Access)
     is_approved: { type: Number, default: 0 }, // 0 or 1
     otp_code: { type: String, default: null },
     otp_expiry: { type: Number, default: null },
