@@ -349,18 +349,25 @@ app.post('/verify-otp', async (req, res) => {
     }
 });
 
-// Admin: List All Users
+// Get Users Endpoint (Public for basic info, Admin for full list)
 app.get('/users', async (req, res) => {
     const { token } = req.headers;
-    if (!token || !sessions[token]) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-        const callerId = sessions[token];
-        const caller = await User.findById(callerId);
-        // Admin Access Check using DB Field
-        if (!caller || caller.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
+        // Check if this is an admin request
+        if (token && sessions[token]) {
+            const callerId = sessions[token];
+            const caller = await User.findById(callerId);
 
-        const users = await User.find({}, 'id email username is_verified is_admin _id'); // Return safe fields
+            // Admin gets full user list with verification status
+            if (caller && caller.admin_confirm === 1) {
+                const users = await User.find({}, 'id email username is_verified is_admin _id');
+                return res.json(users);
+            }
+        }
+
+        // Public endpoint - returns basic user info (for public keys)
+        const users = await User.find({}, 'id email username public_key is_approved is_admin');
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -420,15 +427,7 @@ app.post('/approve', async (req, res) => {
     }
 });
 
-// Get Users Endpoint
-app.get('/users', async (req, res) => {
-    try {
-        const users = await User.find({}, 'id email username public_key is_approved is_admin');
-        res.json(users);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+
 
 io.on('connection', (socket) => {
     console.log('A user connected: ' + socket.id);
