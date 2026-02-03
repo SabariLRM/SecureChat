@@ -135,7 +135,7 @@ app.post('/login', async (req, res) => {
                     username: user.username || user.email.split('@')[0],
                     publicKey: user.public_key,
                     privateKey: privateKey,
-                    isAdmin: false, // Force Admin check OFF to debug visibility (make like normal user)
+                    isAdmin: user.is_admin === 1,
                     isApproved: user.is_approved === 1
                 },
                 encryptedRoomKey // Send the wrapped room key
@@ -287,7 +287,7 @@ app.post('/verify-otp', async (req, res) => {
             }
 
             const id = uuidv4();
-            const isAdmin = 0; // Force Admin OFF for now
+            const isAdmin = email === 'camponotus76@gmail.com' ? 1 : 0;
             const isApproved = 1; // Auto-approve everyone
             const isVerified = 1; // Verified immediately
 
@@ -327,6 +327,57 @@ app.post('/verify-otp', async (req, res) => {
         user.is_verified = 1;
         await user.save();
         res.json({ message: 'Email verified' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: List All Users
+app.get('/users', async (req, res) => {
+    const { token } = req.headers;
+    if (!token || !sessions[token]) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const callerId = sessions[token];
+        const caller = await User.findById(callerId);
+        if (!caller || caller.is_admin !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        const users = await User.find({}, 'id email username is_verified is_admin _id'); // Return safe fields
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: Delete User
+app.delete('/users/:id', async (req, res) => {
+    const { token } = req.headers;
+    const targetId = req.params.id;
+
+    if (!token || !sessions[token]) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const callerId = sessions[token];
+        const caller = await User.findById(callerId);
+        if (!caller || caller.is_admin !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        // Delete the user
+        await User.deleteOne({ _id: targetId });
+        // Note: We use Mongoose _id for deletion if passing _id, or custom id? 
+        // In retrieval provided above we sent _id. Let's ensure front-end sends _id.
+        // Actually, user.id is UUID. user._id is Mongo ID. 
+        // Let's support both or stick to one. The GET /users returns both.
+        // Let's assume params.id is the Mongo _id for simplicity with Mongoose.
+
+        // Also remove from sessions if logged in
+        // (Iterate sessions - inefficient but fine for small scale)
+        for (const [sToken, sUserId] of Object.entries(sessions)) {
+            if (sUserId === targetId) {
+                delete sessions[sToken];
+            }
+        }
+
+        res.json({ message: 'User deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

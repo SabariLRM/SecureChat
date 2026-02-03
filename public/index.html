@@ -70,8 +70,24 @@
         </form>
     </div>
 
+    <!-- Admin Panel Modal -->
+    <div id="admin-panel" style="display: none;">
+        <div class="login-box" style="max-width: 600px; width: 90%;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Admin Panel</h2>
+                <button id="close-admin-btn"
+                    style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">&times;</button>
+            </div>
+            <p>Manage Users (Delete carefully!)</p>
+            <div id="user-list" style="max-height: 400px; overflow-y: auto; text-align: left;">
+                <!-- Users will be populated here -->
+                <p>Loading users...</p>
+            </div>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js?v=admindebug"></script>
+    <script src="script.js?v=adminpanel"></script>
 
     <!-- OTP Style Override -->
     <style>

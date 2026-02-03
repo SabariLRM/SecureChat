@@ -228,9 +228,136 @@ async function resendOtp() {
     }
 }
 
+
+// --- Admin Panel Logic ---
+// adminPanel defined at top
+const userListDiv = document.getElementById('user-list');
+const closeAdminBtn = document.getElementById('close-admin-btn');
+const headerRight = document.querySelector('.header-right');
+
+// Styling Inject (or add to css file, doing here for speed)
+const adminBtn = document.createElement('button');
+adminBtn.textContent = 'Admin Panel';
+adminBtn.id = 'admin-btn';
+adminBtn.style.marginRight = '10px';
+adminBtn.style.background = '#e17055';
+adminBtn.style.color = 'white';
+adminBtn.style.border = 'none';
+adminBtn.style.padding = '8px 12px';
+adminBtn.style.borderRadius = '6px';
+adminBtn.style.cursor = 'pointer';
+adminBtn.style.display = 'none';
+headerRight.insertBefore(adminBtn, document.getElementById('logout-btn'));
+
+adminBtn.addEventListener('click', () => {
+    adminPanel.style.display = 'flex';
+    fetchAdminUsers(); // Renamed to avoid conflict
+});
+
+closeAdminBtn.addEventListener('click', () => {
+    adminPanel.style.display = 'none';
+});
+
+// Close on outside click
+adminPanel.addEventListener('click', (e) => {
+    if (e.target === adminPanel) adminPanel.style.display = 'none';
+});
+
+async function fetchAdminUsers() { // Renamed to avoid conflict
+    userListDiv.innerHTML = '<p>Loading...</p>';
+    try {
+        const res = await fetch('/users', {
+            headers: { 'token': sessionToken }
+        });
+        const users = await res.json();
+
+        if (res.status !== 200) throw new Error(users.error);
+
+        userListDiv.innerHTML = '';
+        if (users.length === 0) {
+            userListDiv.innerHTML = '<p>No users found.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.color = 'white';
+
+        table.innerHTML = `
+            <tr style="border-bottom: 1px solid #444;">
+                <th style="padding:8px; text-align:left;">Email</th>
+                <th style="padding:8px; text-align:left;">Verified</th>
+                <th style="padding:8px; text-align:left;">Action</th>
+            </tr>
+        `;
+
+        users.forEach(u => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #333';
+
+            const isMe = u.email === currentUser.email;
+
+            tr.innerHTML = `
+                <td style="padding:8px;">${u.email} ${u.is_admin ? '<span style="color:#e17055; font-size:0.8em;">(ADMIN)</span>' : ''}</td>
+                <td style="padding:8px;">${u.is_verified ? '✅' : '❌'}</td>
+                <td style="padding:8px;">
+                    ${isMe ? '' : `<button class="delete-user-btn" data-id="${u._id}" style="background:#d63031; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Delete</button>`}
+                </td>
+            `;
+            table.appendChild(tr);
+        });
+
+        userListDiv.appendChild(table);
+
+        // Attach listeners
+        document.querySelectorAll('.delete-user-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const uid = e.target.getAttribute('data-id');
+                if (confirm('Are you SURE you want to delete this user? This cannot be undone.')) {
+                    await deleteUser(uid);
+                }
+            });
+        });
+
+    } catch (e) {
+        userListDiv.innerHTML = `<p style="color:red">Error: ${e.message}</p>`;
+    }
+}
+
+async function deleteUser(userId) {
+    try {
+        const res = await fetch(`/users/${userId}`, {
+            method: 'DELETE',
+            headers: { 'token': sessionToken }
+        });
+        const data = await res.json();
+        if (res.status === 200) {
+            alert('User deleted.');
+            fetchAdminUsers(); // Refresh (renamed)
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (e) {
+        alert('Request failed: ' + e.message);
+    }
+}
+
+// Show Admin Button check (call in initApp or after login)
+function checkAdminUI() {
+    if (currentUser && currentUser.isAdmin) {
+        adminBtn.style.display = 'inline-block';
+    } else {
+        adminBtn.style.display = 'none';
+    }
+}
+
+
 // --- App Initialization ---
 
 async function initApp() {
+    // Show/Hide Admin UI
+    checkAdminUI();
     loginOverlay.style.display = 'none';
     appContainer.style.display = 'flex';
     userEmailDisplay.textContent = `${currentUser.username} (${currentUser.email})` + (currentUser.isAdmin ? ' [Admin]' : '');
