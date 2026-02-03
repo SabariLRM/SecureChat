@@ -364,15 +364,20 @@ async function initApp() {
 
     // Import Keys
     try {
+        console.log("[InitApp] Starting key import...");
+        console.log("[InitApp] Private key length:", currentUser.privateKey?.length);
+
         myPrivateKey = await importPrivateKey(currentUser.privateKey);
+        console.log("[InitApp] Private key imported successfully");
 
         // Decrypt Room Key if available
         if (currentUser.encryptedRoomKey) {
+            console.log("[InitApp] Unwrapping room key from login response...");
             await unwrapRoomKey(currentUser.encryptedRoomKey);
-            console.log("Room Key loaded.");
+            console.log("[InitApp] Room Key loaded from login.");
         } else {
             // Attempt to fetch Room Key (Session Restore)
-            console.log("Room Key missing. Fetching from server...");
+            console.log("[InitApp] Room Key missing. Fetching from server...");
             const res = await fetch('/get-room-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -380,25 +385,28 @@ async function initApp() {
             });
             const data = await res.json();
             if (data.encryptedRoomKey) {
+                console.log("[InitApp] Unwrapping room key from server...");
                 await unwrapRoomKey(data.encryptedRoomKey);
-                console.log("Room Key restored from server.");
+                console.log("[InitApp] Room Key restored from server.");
             } else {
-                console.warn("Could not retrieve Room Key. Chat may be unreadable.");
+                console.warn("[InitApp] Could not retrieve Room Key. Chat may be unreadable.");
             }
         }
 
+        console.log("[InitApp] Fetching users...");
         // We also need public keys of others.
         await fetchUsers();
 
+        console.log("[InitApp] Connecting to socket...");
         // Connect Socket
         socket.emit('join', currentUser.email);
 
-        // Admin UI REMOVED
-
+        console.log("[InitApp] Initialization complete!");
 
     } catch (e) {
-        console.error("Key Import Error:", e);
-        alert("Failed to load keys. Please check browser compatibility.");
+        console.error("[InitApp] Key Import Error:", e);
+        console.error("[InitApp] Error stack:", e.stack);
+        alert(`Failed to load keys: ${e.message}. Check console for details.`);
     }
 }
 
@@ -414,16 +422,33 @@ async function fetchUsers() {
 // --- Crypto Helpers ---
 
 function pemToArrayBuffer(pem) {
-    const b64 = pem.replace(/-----BEGIN [^-]+-----/, '').replace(/-----END [^-]+-----/, '').replace(/\s/g, '');
-    const str = atob(b64);
-    const buf = new ArrayBuffer(str.length);
-    const view = new Uint8Array(buf);
-    for (let i = 0; i < str.length; i++) view[i] = str.charCodeAt(i);
-    return buf;
+    try {
+        console.log("[Crypto] Converting PEM to ArrayBuffer, length:", pem?.length);
+        const b64 = pem.replace(/-----BEGIN [^-]+-----/, '').replace(/-----END [^-]+-----/, '').replace(/\s/g, '');
+        console.log("[Crypto] Base64 extracted, length:", b64.length);
+        const str = atob(b64);
+        const buf = new ArrayBuffer(str.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < str.length; i++) view[i] = str.charCodeAt(i);
+        console.log("[Crypto] ArrayBuffer created, length:", buf.byteLength);
+        return buf;
+    } catch (e) {
+        console.error("[Crypto] Error in pemToArrayBuffer:", e);
+        throw e;
+    }
 }
 
 async function importPrivateKey(pem) {
-    return window.crypto.subtle.importKey("pkcs8", pemToArrayBuffer(pem), KEY_ALGO, true, ["decrypt"]);
+    try {
+        console.log("[Crypto] Importing private key...");
+        const buffer = pemToArrayBuffer(pem);
+        const key = await window.crypto.subtle.importKey("pkcs8", buffer, KEY_ALGO, true, ["decrypt"]);
+        console.log("[Crypto] Private key imported successfully");
+        return key;
+    } catch (e) {
+        console.error("[Crypto] Error importing private key:", e);
+        throw e;
+    }
 }
 
 async function importPublicKey(pem) {
@@ -434,12 +459,24 @@ async function importPublicKey(pem) {
 let currentRoomKey = null;
 
 async function unwrapRoomKey(encryptedRoomKeyHex) {
-    if (!myPrivateKey) throw new Error("Private Key not loaded");
-    const encryptedBytes = hexToArrayBuffer(encryptedRoomKeyHex);
-    // Decrypt the AES Key using RSA Private Key
-    const aesKeyRaw = await window.crypto.subtle.decrypt(KEY_ALGO, myPrivateKey, encryptedBytes);
-    // Import the AES Key
-    currentRoomKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["encrypt", "decrypt"]);
+    try {
+        console.log("[RoomKey] Starting unwrap, encrypted key length:", encryptedRoomKeyHex?.length);
+        if (!myPrivateKey) throw new Error("Private Key not loaded");
+
+        const encryptedBytes = hexToArrayBuffer(encryptedRoomKeyHex);
+        console.log("[RoomKey] Encrypted bytes length:", encryptedBytes.byteLength);
+
+        // Decrypt the AES Key using RSA Private Key
+        const aesKeyRaw = await window.crypto.subtle.decrypt(KEY_ALGO, myPrivateKey, encryptedBytes);
+        console.log("[RoomKey] AES key decrypted, length:", aesKeyRaw.byteLength);
+
+        // Import the AES Key
+        currentRoomKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["encrypt", "decrypt"]);
+        console.log("[RoomKey] Room key imported successfully");
+    } catch (e) {
+        console.error("[RoomKey] Error unwrapping room key:", e);
+        throw e;
+    }
 }
 
 async function encryptMessage(text) {
