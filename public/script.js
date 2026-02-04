@@ -761,6 +761,17 @@ socket.on('user-accepted', ({ email }) => {
     }
 });
 
+// Listen for user list updates (e.g., when someone is accepted)
+socket.on('users-updated', () => {
+    console.log("[Socket] Users updated, refreshing list...");
+    if (currentUser && currentUser.acceptme) {
+        fetchUsers(); // Refresh user list for all accepted users
+        if (currentUser.adminConfirm) {
+            fetchAdminUsers(); // Refresh admin panel if open
+        }
+    }
+});
+
 // Socket Status
 socket.on('connect', () => {
     connectionStatus.textContent = 'Connected';

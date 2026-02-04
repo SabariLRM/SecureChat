@@ -456,7 +456,8 @@ app.post('/accept-user', async (req, res) => {
             return res.status(404).json({ error: 'User not found or already accepted' });
         }
 
-        io.emit('user-accepted', { email: targetEmail });
+        io.emit('user-accepted', { email: targetEmail }); // Notify accepted user
+        io.emit('users-updated'); // Notify all users to refresh their user lists
         res.json({ message: 'User accepted for chat access' });
     } catch (err) {
         res.status(500).json({ error: err.message });
