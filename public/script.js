@@ -116,6 +116,10 @@ async function login() {
             sessionToken = data.token;
             currentUser = data.user;
 
+            // Save session to localStorage for admin panel
+            localStorage.setItem('sessionToken', data.token);
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+
             // Decrypt Room Key
             if (data.encryptedRoomKey) {
                 try {

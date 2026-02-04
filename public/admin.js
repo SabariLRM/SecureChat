@@ -12,9 +12,18 @@ const messageList = document.getElementById('messageList');
 const refreshMessagesBtn = document.getElementById('refreshMessages');
 const deleteAllMessagesBtn = document.getElementById('deleteAllMessages');
 
+// Check if user is logged in
+if (!currentUser || !sessionToken) {
+    alert('Please log in first.');
+    window.location.href = '/';
+} else {
+    console.log('[Admin Panel] Access granted');
+    adminEmailDisplay.textContent = currentUser.email;
 
-console.log('[Admin Panel] Access granted');
-adminEmailDisplay.textContent = currentUser.email;
+    // Load data on page load
+    fetchUsers();
+    fetchMessages();
+}
 
 
 // Logout
