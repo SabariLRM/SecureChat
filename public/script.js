@@ -642,7 +642,8 @@ socket.on('history', async (msgs) => {
                 sender: msg.sender_email,
                 senderUsername: msg.sender_username,
                 encrypted: encryptedObj,
-                isApproved: msg.sender_approved
+                isApproved: msg.sender_approved,
+                id: msg._id
             };
             await displayMessage(parsed);
         } catch (err) {
@@ -792,6 +793,24 @@ socket.on('connect', () => {
 });
 
 // Message deletion events
+async function deleteMessage(messageId, elementToRemove) {
+    try {
+        const res = await fetch('/delete-message', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: sessionToken, messageId })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            if (elementToRemove) elementToRemove.remove();
+        } else {
+            alert('Delete failed: ' + data.error);
+        }
+    } catch (e) {
+        console.error('Delete error:', e);
+    }
+}
+
 socket.on('message-deleted', ({ messageId }) => {
     // Remove message from UI
     const msgElements = document.querySelectorAll('.message');
