@@ -26,6 +26,14 @@ if (!currentUser || !sessionToken) {
 }
 
 
+// Back to Chat
+const backToChatBtn = document.getElementById('backToChatBtn');
+if (backToChatBtn) {
+    backToChatBtn.addEventListener('click', () => {
+        window.location.href = '/';
+    });
+}
+
 // Logout
 logoutBtn.addEventListener('click', () => {
     localStorage.clear();
@@ -177,16 +185,15 @@ async function fetchMessages() {
             item.className = 'message-item';
             item.dataset.messageId = msg._id;
 
-            const time = new Date(msg.timestamp).toLocaleString();
-            const content = msg.encrypted_content ?
-                `[Encrypted: ${msg.encrypted_content.substring(0, 50)}...]` :
-                '[No content]';
+            const encryptedMsg = msg.encrypted_content || 'N/A';
+            const truncatedEncrypted = encryptedMsg.length > 100 ?
+                encryptedMsg.substring(0, 100) + '...' : encryptedMsg;
 
             item.innerHTML = `
                 <div class="message-content">
-                    <div class="message-sender">${msg.sender_email}</div>
-                    <div class="message-text">${content}</div>
-                    <div class="message-time">${time}</div>
+                    <div class="message-sender"><strong>From:</strong> ${msg.sender_email}</div>
+                    <div class="message-encrypted"><strong>Encrypted:</strong> <code>${truncatedEncrypted}</code></div>
+                    <div class="message-decrypted"><strong>Decrypted:</strong> [Admin cannot decrypt messages]</div>
                 </div>
                 <button class="btn-delete-message" data-id="${msg._id}">Delete</button>
             `;
