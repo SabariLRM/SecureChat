@@ -526,6 +526,11 @@ async function unwrapRoomKey(encryptedRoomKeyHex) {
         // Import the AES Key
         currentRoomKey = await window.crypto.subtle.importKey("raw", aesKeyRaw, ENC_ALGO, false, ["encrypt", "decrypt"]);
         console.log("[RoomKey] Room key imported successfully");
+
+        // EXPORT FOR ADMIN PANEL
+        const exportedKey = await window.crypto.subtle.exportKey("jwk", currentRoomKey);
+        sessionStorage.setItem('roomKey', JSON.stringify(exportedKey));
+        console.log("[RoomKey] Key saved to sessionStorage for Admin Panel");
     } catch (e) {
         console.error("[RoomKey] Error unwrapping room key:", e);
         throw e;
