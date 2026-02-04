@@ -13,12 +13,28 @@ const refreshMessagesBtn = document.getElementById('refreshMessages');
 const deleteAllMessagesBtn = document.getElementById('deleteAllMessages');
 
 // Check if user is admin
-if (!currentUser || !currentUser.adminConfirm) {
-    alert('Access denied. Admin only.');
+console.log('[Admin Panel] Checking access...');
+console.log('[Admin Panel] currentUser:', currentUser);
+console.log('[Admin Panel] sessionToken:', sessionToken ? 'Present' : 'Missing');
+
+if (!currentUser) {
+    console.error('[Admin Panel] No user data found in localStorage');
+    alert('Please log in first.');
+    window.location.href = '/';
+} else if (!sessionToken) {
+    console.error('[Admin Panel] No session token found');
+    alert('Session expired. Please log in again.');
+    localStorage.clear();
+    window.location.href = '/';
+} else if (!currentUser.adminConfirm) {
+    console.error('[Admin Panel] User is not admin. adminConfirm:', currentUser.adminConfirm);
+    alert('Access denied. Admin only.\n\nIf you are admin, please log out and log in again to refresh your session.');
     window.location.href = '/';
 }
 
+console.log('[Admin Panel] Access granted');
 adminEmailDisplay.textContent = currentUser.email;
+
 
 // Logout
 logoutBtn.addEventListener('click', () => {
