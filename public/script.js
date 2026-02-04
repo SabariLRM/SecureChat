@@ -377,12 +377,13 @@ async function acceptUser(targetEmail) {
     }
 }
 
-// Show Admin Button check (call in initApp or after login)
+// Show Admin Panel Link (call in initApp or after login)
 function checkAdminUI() {
-    if (currentUser && currentUser.adminConfirm) {
-        adminBtn.style.display = 'inline-block';
-    } else {
-        adminBtn.style.display = 'none';
+    const adminPanelLink = document.getElementById('admin-panel-link');
+    if (currentUser && currentUser.adminConfirm && adminPanelLink) {
+        adminPanelLink.style.display = 'inline-block';
+    } else if (adminPanelLink) {
+        adminPanelLink.style.display = 'none';
     }
 }
 
@@ -784,4 +785,20 @@ socket.on('connect', () => {
     connectionStatus.classList.add('connected');
     // Refetch users on reconnect to ensure we have latest keys
     if (currentUser) fetchUsers();
+});
+
+// Message deletion events
+socket.on('message-deleted', ({ messageId }) => {
+    // Remove message from UI
+    const msgElements = document.querySelectorAll('.message');
+    msgElements.forEach(el => {
+        if (el.dataset.messageId === messageId) {
+            el.remove();
+        }
+    });
+});
+
+socket.on('all-messages-deleted', () => {
+    // Clear all messages
+    messagesDiv.innerHTML = '';
 });

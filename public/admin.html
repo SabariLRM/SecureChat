@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focys Chat - Admin Panel</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+
+<body>
+    <div class="admin-container">
+        <header class="admin-header">
+            <h1>🔐 Admin Panel</h1>
+            <div class="header-actions">
+                <span id="adminEmail" class="admin-email"></span>
+                <a href="/" class="btn-back">← Back to Chat</a>
+                <button id="logoutBtn" class="btn-logout">Logout</button>
+            </div>
+        </header>
+
+        <main class="admin-main">
+            <section class="users-section">
+                <h2>User Management</h2>
+                <div id="userList" class="user-list">
+                    <p>Loading users...</p>
+                </div>
+            </section>
+
+            <section class="messages-section">
+                <h2>Message Management</h2>
+                <div class="filter-controls">
+                    <button id="refreshMessages" class="btn-primary">🔄 Refresh Messages</button>
+                    <button id="deleteAllMessages" class="btn-danger">🗑️ Delete All Messages</button>
+                </div>
+                <div id="messageList" class="message-list">
+                    <p>Loading messages...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="admin.js"></script>
+</body>
+
+</html>

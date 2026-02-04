@@ -464,6 +464,58 @@ app.post('/accept-user', async (req, res) => {
     }
 });
 
+// Get All Messages (Admin Only)
+app.get('/get-all-messages', async (req, res) => {
+    const { token } = req.headers;
+    const adminObjectId = sessions[token];
+    if (!adminObjectId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await User.findById(adminObjectId);
+        if (!admin || admin.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        const messages = await Message.find({}).sort({ timestamp: -1 }).limit(100);
+        res.json({ messages });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Message (Admin Only)
+app.delete('/delete-message', async (req, res) => {
+    const { token, messageId } = req.body;
+    const adminObjectId = sessions[token];
+    if (!adminObjectId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await User.findById(adminObjectId);
+        if (!admin || admin.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        await Message.deleteOne({ _id: messageId });
+        io.emit('message-deleted', { messageId });
+        res.json({ message: 'Message deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete All Messages (Admin Only)
+app.delete('/delete-all-messages', async (req, res) => {
+    const { token } = req.body;
+    const adminObjectId = sessions[token];
+    if (!adminObjectId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await User.findById(adminObjectId);
+        if (!admin || admin.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        await Message.deleteMany({});
+        io.emit('all-messages-deleted');
+        res.json({ message: 'All messages deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 
 io.on('connection', (socket) => {
