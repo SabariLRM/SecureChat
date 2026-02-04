@@ -766,6 +766,12 @@ socket.on('users-updated', () => {
     console.log("[Socket] Users updated, refreshing list...");
     if (currentUser && currentUser.acceptme) {
         fetchUsers(); // Refresh user list for all accepted users
+
+        // Refresh message history to show newly accepted user's messages
+        if (socket.connected) {
+            socket.emit('join', currentUser.email);
+        }
+
         if (currentUser.adminConfirm) {
             fetchAdminUsers(); // Refresh admin panel if open
         }
