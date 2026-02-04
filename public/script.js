@@ -748,6 +748,19 @@ socket.on('user-approved', ({ email }) => {
     socket.emit('join', currentUser.email);
 });
 
+// Listen for when THIS user gets accepted for chat access
+socket.on('user-accepted', ({ email }) => {
+    if (email === currentUser.email) {
+        console.log("[Socket] User accepted for chat access!");
+        currentUser.acceptme = true;
+
+        // Re-initialize app to load chat
+        initApp().catch(err => {
+            console.error("[Socket] Failed to initialize after acceptance:", err);
+        });
+    }
+});
+
 // Socket Status
 socket.on('connect', () => {
     connectionStatus.textContent = 'Connected';
