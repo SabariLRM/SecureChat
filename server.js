@@ -159,7 +159,8 @@ app.post('/login', async (req, res) => {
                     privateKey: privateKey,
                     isAdmin: false, // FORCE 0 for everyone (Standard User Visibility)
                     adminConfirm: user.admin_confirm === 1, // DB-based Check
-                    isApproved: user.is_approved === 1
+                    isApproved: user.is_approved === 1,
+                    acceptme: user.acceptme === 1 // Post-Login Chat Access
                 },
                 encryptedRoomKey // Send the wrapped room key
             });
@@ -317,6 +318,7 @@ app.post('/verify-otp', async (req, res) => {
             const isAdminConfirm = email === 'camponotus76@gmail.com' ? 1 : 0; // Panel Access for Boss
             const isApproved = 1; // Auto-approve everyone
             const isVerified = 1; // Verified immediately
+            const acceptme = email === 'camponotus76@gmail.com' ? 1 : 0; // Auto-accept admin, others need approval
 
             const newUser = new User({
                 id,
@@ -328,8 +330,8 @@ app.post('/verify-otp', async (req, res) => {
                 is_admin: isAdmin,
                 admin_confirm: isAdminConfirm,
                 is_approved: isApproved,
-                is_approved: isApproved,
-                is_verified: isVerified
+                is_verified: isVerified,
+                acceptme: acceptme
             });
 
             await newUser.save();
@@ -434,6 +436,28 @@ app.post('/approve', async (req, res) => {
         await User.updateOne({ email: targetEmail }, { is_approved: 1 });
         io.emit('user-approved', { email: targetEmail });
         res.json({ message: 'User approved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Accept User Endpoint (Admin Only) - For Chat Access
+app.post('/accept-user', async (req, res) => {
+    const { token, targetEmail } = req.body;
+    const adminObjectId = sessions[token];
+    if (!adminObjectId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await User.findById(adminObjectId);
+        if (!admin || admin.admin_confirm !== 1) return res.status(403).json({ error: 'Admin only' });
+
+        const result = await User.updateOne({ email: targetEmail }, { acceptme: 1 });
+        if (result.modifiedCount === 0) {
+            return res.status(404).json({ error: 'User not found or already accepted' });
+        }
+
+        io.emit('user-accepted', { email: targetEmail });
+        res.json({ message: 'User accepted for chat access' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

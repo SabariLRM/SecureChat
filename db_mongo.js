@@ -26,6 +26,7 @@ const userSchema = new mongoose.Schema({
     is_admin: { type: Number, default: 0 }, // 0 or 1
     admin_confirm: { type: Number, default: 0 }, // 0 or 1 (Panel Access)
     is_approved: { type: Number, default: 0 }, // 0 or 1
+    acceptme: { type: Number, default: 0 }, // 0 or 1 (Post-Login Chat Access Approval)
     otp_code: { type: String, default: null },
     otp_expiry: { type: Number, default: null },
     is_verified: { type: Number, default: 0 }

@@ -288,6 +288,7 @@ async function fetchAdminUsers() { // Renamed to avoid conflict
             <tr style="border-bottom: 1px solid #444;">
                 <th style="padding:8px; text-align:left;">Email</th>
                 <th style="padding:8px; text-align:left;">Verified</th>
+                <th style="padding:8px; text-align:left;">Chat Access</th>
                 <th style="padding:8px; text-align:left;">Action</th>
             </tr>
         `;
@@ -297,11 +298,15 @@ async function fetchAdminUsers() { // Renamed to avoid conflict
             tr.style.borderBottom = '1px solid #333';
 
             const isMe = u.email === currentUser.email;
+            const chatAccess = u.acceptme ? '✅ Accepted' : '⏳ Pending';
+            const chatAccessColor = u.acceptme ? '#00b894' : '#ffa502';
 
             tr.innerHTML = `
                 <td style="padding:8px;">${u.email} ${u.is_admin ? '<span style="color:#e17055; font-size:0.8em;">(ADMIN)</span>' : ''}</td>
                 <td style="padding:8px;">${u.is_verified ? '✅' : '❌'}</td>
+                <td style="padding:8px; color:${chatAccessColor};">${chatAccess}</td>
                 <td style="padding:8px;">
+                    ${!u.acceptme && !isMe ? `<button class="accept-user-btn" data-email="${u.email}" style="background:#00b894; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px;">Accept</button>` : ''}
                     ${isMe ? '' : `<button class="delete-user-btn" data-id="${u._id}" style="background:#d63031; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Delete</button>`}
                 </td>
             `;
@@ -310,7 +315,17 @@ async function fetchAdminUsers() { // Renamed to avoid conflict
 
         userListDiv.appendChild(table);
 
-        // Attach listeners
+        // Attach Accept button listeners
+        document.querySelectorAll('.accept-user-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const userEmail = e.target.getAttribute('data-email');
+                if (confirm(`Accept ${userEmail} for chat access?`)) {
+                    await acceptUser(userEmail);
+                }
+            });
+        });
+
+        // Attach Delete button listeners
         document.querySelectorAll('.delete-user-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const uid = e.target.getAttribute('data-id');
@@ -343,6 +358,25 @@ async function deleteUser(userId) {
     }
 }
 
+async function acceptUser(targetEmail) {
+    try {
+        const res = await fetch('/accept-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: sessionToken, targetEmail })
+        });
+        const data = await res.json();
+        if (res.status === 200) {
+            alert('User accepted for chat access.');
+            fetchAdminUsers(); // Refresh
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (e) {
+        alert('Request failed: ' + e.message);
+    }
+}
+
 // Show Admin Button check (call in initApp or after login)
 function checkAdminUI() {
     if (currentUser && currentUser.adminConfirm) {
@@ -361,6 +395,20 @@ async function initApp() {
     loginOverlay.style.display = 'none';
     appContainer.style.display = 'flex';
     userEmailDisplay.textContent = `${currentUser.username} (${currentUser.email})` + (currentUser.isAdmin ? ' [Admin]' : '');
+
+    // Check if user is accepted for chat access
+    if (!currentUser.acceptme) {
+        console.log("[InitApp] User not accepted for chat access");
+        messagesDiv.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #ffa502;">
+                <h2>⏳ Pending Admin Approval</h2>
+                <p style="margin-top: 10px;">Your account is awaiting admin approval.<br>You'll be able to access chat once approved.</p>
+            </div>
+        `;
+        messageInput.disabled = true;
+        messageInput.placeholder = "Waiting for admin approval...";
+        return; // Stop here, don't load keys or connect
+    }
 
     // Import Keys
     try {
