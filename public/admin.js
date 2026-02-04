@@ -26,14 +26,6 @@ if (!currentUser || !sessionToken) {
 }
 
 
-// Back to Chat
-const backToChatBtn = document.getElementById('backToChatBtn');
-if (backToChatBtn) {
-    backToChatBtn.addEventListener('click', () => {
-        window.location.href = '/';
-    });
-}
-
 // Logout
 logoutBtn.addEventListener('click', () => {
     localStorage.clear();
@@ -162,45 +154,6 @@ async function deleteUser(userId) {
     }
 }
 
-// CRYPTO UTILS
-const KEY_ALGO = { name: "RSA-OAEP", modulusLength: 2048, hash: "SHA-256" };
-const ENC_ALGO = { name: "AES-GCM", length: 256 };
-
-function hexToArrayBuffer(hex) {
-    if (!hex) return new ArrayBuffer(0);
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
-    return bytes.buffer;
-}
-
-async function getAdminRoomKey() {
-    const jsonKey = sessionStorage.getItem('roomKey');
-    if (!jsonKey) return null;
-    try {
-        const jwk = JSON.parse(jsonKey);
-        return await window.crypto.subtle.importKey("jwk", jwk, ENC_ALGO, false, ["encrypt", "decrypt"]);
-    } catch (e) {
-        console.error("Failed to import room key from session:", e);
-        return null;
-    }
-}
-
-async function decryptMessage(encryptedHex, roomKey) {
-    if (!encryptedHex || !roomKey) return null;
-    try {
-        const data = hexToArrayBuffer(encryptedHex);
-        const iv = data.slice(0, 12);
-        const ciphertext = data.slice(12);
-        const decrypted = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, roomKey, ciphertext);
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        console.error("Decryption failed:", e);
-        return "[Decryption Error]";
-    }
-}
-
 // Fetch and display messages
 async function fetchMessages() {
     messageList.innerHTML = '<p>Loading...</p>';
@@ -218,39 +171,28 @@ async function fetchMessages() {
             return;
         }
 
-        // Get Key
-        const roomKey = await getAdminRoomKey();
-
         messageList.innerHTML = '';
-        for (const msg of messages) {
+        messages.forEach(msg => {
             const item = document.createElement('div');
             item.className = 'message-item';
             item.dataset.messageId = msg._id;
 
-            const encryptedMsg = msg.encrypted_content || 'N/A';
-            const truncatedEncrypted = encryptedMsg.length > 50 ?
-                encryptedMsg.substring(0, 50) + '...' : encryptedMsg;
-
-            let decryptedContent = "[Room Key Not Found - Login to Chat First]";
-            if (roomKey && msg.encrypted_content) {
-                const decrypted = await decryptMessage(msg.encrypted_content, roomKey);
-                if (decrypted) decryptedContent = decrypted;
-            } else if (!msg.encrypted_content) {
-                decryptedContent = "[No Content]";
-            }
+            const time = new Date(msg.timestamp).toLocaleString();
+            const content = msg.encrypted_content ?
+                `[Encrypted: ${msg.encrypted_content.substring(0, 50)}...]` :
+                '[No content]';
 
             item.innerHTML = `
                 <div class="message-content">
-                    <div class="message-sender"><strong>From:</strong> ${msg.sender_email}</div>
-                    <div class="message-decrypted" style="color: #00b894; margin-top:4px;"><strong>Decrypted:</strong> ${decryptedContent}</div>
-                    <div class="message-encrypted" style="opacity:0.6; font-size:0.8em;"><strong>Encrypted:</strong> <code>${truncatedEncrypted}</code></div>
+                    <div class="message-sender">${msg.sender_email}</div>
+                    <div class="message-text">${content}</div>
+                    <div class="message-time">${time}</div>
                 </div>
                 <button class="btn-delete-message" data-id="${msg._id}">Delete</button>
             `;
+
             messageList.appendChild(item);
-        }
-
-
+        });
 
         // Attach delete listeners
         document.querySelectorAll('.btn-delete-message').forEach(btn => {
