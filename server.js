@@ -71,19 +71,31 @@ function encryptWithPublicKey(publicKeyPem, data) {
 
 // Helper: Encrypt/Decrypt Private Key for storage
 function encryptPrivateKey(privateKey, password) {
-    const key = crypto.scryptSync(password, 'salt', 32);
+    // Generate a unique random salt for this user (32 bytes)
+    const salt = crypto.randomBytes(32);
+    const key = crypto.scryptSync(password, salt, 32);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     let encrypted = cipher.update(privateKey, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const tag = cipher.getAuthTag();
-    return { content: encrypted, iv: iv.toString('hex'), tag: tag.toString('hex') };
+    return {
+        content: encrypted,
+        iv: iv.toString('hex'),
+        tag: tag.toString('hex'),
+        salt: salt.toString('hex') // Store salt with encrypted data
+    };
 }
 
 // Helper: Decrypt Private Key
 function decryptPrivateKey(encryptedObj, password) {
-    const { content, iv, tag } = JSON.parse(encryptedObj);
-    const key = crypto.scryptSync(password, 'salt', 32);
+    const parsed = JSON.parse(encryptedObj);
+    const { content, iv, tag, salt } = parsed;
+
+    // Use stored salt if available, fallback to hardcoded salt for legacy data
+    const saltBuffer = salt ? Buffer.from(salt, 'hex') : 'salt';
+    const key = crypto.scryptSync(password, saltBuffer, 32);
+
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
     decipher.setAuthTag(Buffer.from(tag, 'hex'));
     let decrypted = decipher.update(content, 'hex', 'utf8');
