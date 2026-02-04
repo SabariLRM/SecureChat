@@ -704,6 +704,25 @@ async function displayMessage(msg) {
     }
 
     div.appendChild(contentSpan);
+
+    // Admin Delete Button
+    if (currentUser && currentUser.adminConfirm && msg.id) {
+        const deleteBtn = document.createElement('span');
+        deleteBtn.innerHTML = ' 🗑️';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.style.marginLeft = '10px';
+        deleteBtn.title = 'Delete Message';
+        deleteBtn.onclick = function () {
+            if (confirm('Delete this message?')) {
+                deleteMessage(msg.id, div);
+            }
+        };
+        div.appendChild(deleteBtn);
+    }
+
+    const timeSpan = document.createElement('span');
+    timeSpan.classList.add('timestamp');
+
     messagesDiv.appendChild(div);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
