@@ -403,14 +403,6 @@ app.delete('/users/:id', async (req, res) => {
 
         // Delete the user
         await User.deleteOne({ _id: targetId });
-        // Note: We use Mongoose _id for deletion if passing _id, or custom id? 
-        // In retrieval provided above we sent _id. Let's ensure front-end sends _id.
-        // Actually, user.id is UUID. user._id is Mongo ID. 
-        // Let's support both or stick to one. The GET /users returns both.
-        // Let's assume params.id is the Mongo _id for simplicity with Mongoose.
-
-        // Also remove from sessions if logged in
-        // (Iterate sessions - inefficient but fine for small scale)
         for (const [sToken, sUserId] of Object.entries(sessions)) {
             if (sUserId === targetId) {
                 delete sessions[sToken];

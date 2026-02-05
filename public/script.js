@@ -473,7 +473,7 @@ async function fetchUsers() {
 }
 
 // --- Crypto Helpers ---
-
+//Base 64
 function pemToArrayBuffer(pem) {
     try {
         console.log("[Crypto] Converting PEM to ArrayBuffer, length:", pem?.length);
